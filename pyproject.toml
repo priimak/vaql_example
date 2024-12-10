@@ -1,0 +1,23 @@
+[project]
+name = "vaql-example"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pyside6==6.8.0.2",
+    "polars==1.14.0"
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.png"]
+
+[project.scripts]
+csv_vaql_browser = "csv_vaql_browser.main:main"
