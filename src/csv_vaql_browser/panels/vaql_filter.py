@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Callable, override
 
@@ -11,6 +12,14 @@ from csv_vaql_browser.tools.linked_list import Node
 class Op(Enum):
     AND = auto()
     OR = auto()
+
+
+@dataclass
+class VAQLFilter:
+    negating: bool
+    op: Op
+    text: str
+
 
 class VAQLFilterLineEdit(QLineEdit):
     COUNTER: int = 1
@@ -33,6 +42,13 @@ class VAQLFilterLineEdit(QLineEdit):
         self.setContentsMargins(QMargins(0, 0, 0, 0))
         self.request_focus = request_focus
 
+    def to_plain_filter(self) -> VAQLFilter:
+        return VAQLFilter(
+            negating = self.negating,
+            op = self.op,
+            text = self.text()
+        )
+
     def link_to_node(self, node: Node) -> None:
         if self.node is None:
             self.node = node
@@ -54,6 +70,7 @@ class VAQLFilterLineEdit(QLineEdit):
         Clear filter input form when Escape is pressed. Otherwise, propagate
         key press events to the parent class.
         """
+
         def handle_and():
             print("handle_and")
             if self.node.value.text().strip() != "":
@@ -97,7 +114,7 @@ class VAQLFilterLineEdit(QLineEdit):
                             return
                     prev_node = prev_node.prev
                 if self.node.prev.value is not None:
-                    self.node.prev.value.setFocus() # TODO: fix me; should move only up
+                    self.node.prev.value.setFocus()
 
             case Qt.Key.Key_Down:
                 next_node = self.node.next
@@ -108,16 +125,27 @@ class VAQLFilterLineEdit(QLineEdit):
                     next_node = next_node.next
 
             case Qt.Key.Key_Left:
-                if self.node.prev is not None and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+                if self.node.prev is not None and event.modifiers() in [Qt.KeyboardModifier.ControlModifier,
+                                                                        Qt.KeyboardModifier.ShiftModifier]:
                     self.node.prev.value.setFocus()
                 else:
+                    original_cursor_position = self.cursorPosition()
                     super().keyPressEvent(event)
+                    if original_cursor_position == self.cursorPosition() and self.node.prev is not None:
+                        # we came to end of the text; jump over to the next cell
+                        self.node.prev.value.setFocus()
 
             case Qt.Key.Key_Right:
-                if self.node.next is not None and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
-                    self.node.next.value.setFocus() # TODO: fix me; should move only up
+                assert self.node is not None
+                if self.node.next is not None and event.modifiers() in [Qt.KeyboardModifier.ControlModifier,
+                                                                        Qt.KeyboardModifier.ShiftModifier]:
+                    self.node.next.value.setFocus()
                 else:
+                    original_cursor_position = self.cursorPosition()
                     super().keyPressEvent(event)
+                    if original_cursor_position == self.cursorPosition() and self.node.next is not None:
+                        # we came to end of the text; jump over to the next cell
+                        self.node.next.value.setFocus()
 
             case Qt.Key.Key_Escape:
                 self.clear()
@@ -165,7 +193,6 @@ class VAQLFilterLineEdit(QLineEdit):
                         self.filters_changed_callback()
                     else:
                         super().keyPressEvent(event)
-
 
             case Qt.Key.Key_Bar | Qt.Key.Key_Backslash:
                 if (self.node.value.text().strip() != "" and

@@ -1,10 +1,13 @@
-from typing import Callable, override, Any, Self
+import time
+from queue import Queue
+from threading import Thread, Condition, Lock
+from typing import Callable, override, Any, Self, List
 
 import polars
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
 from polars import DataFrame
 
-from csv_vaql_browser.panels.vaql_filter import VAQLFilterLineEdit, Op
+from csv_vaql_browser.panels.vaql_filter import VAQLFilterLineEdit, Op, VAQLFilter
 from csv_vaql_browser.tools.err import err
 
 
@@ -18,13 +21,30 @@ class CSVDataFrameModel(QAbstractTableModel):
         self.apply_filter: Callable[[str], None] = self.filter_on_substring
         self.loaded_file_name: str | None = None
 
+        self.filters_lock = Lock()
+        self.filters_queue = Queue[List[VAQLFilter]]()
+        self.filter_changed_condition = Condition()
+        self.update_thread = Thread(target = self.watchman)
+        self.update_thread.start()
+
+    def watchman(self) -> None:
+        while True:
+            filters = self.filters_queue.get()
+            if self.filters_queue.empty():
+                start_at: float = time.time()
+                self._filter_on_vaql(filters)
+                print(f"search done in {time.time() - start_at} s")
+
+    def filter_on_vaql(self, all_filters: list[VAQLFilterLineEdit]):
+        self.filters_queue.put([f.to_plain_filter() for f in all_filters])
+
     def load_csv_file(self, file_name: str) -> Exception | None:
         try:
             csv = polars.read_csv(file_name)
 
             a = [polars.col(column_name).cast(polars.String) for column_name in csv.columns]
-            print(a)
-            self.csv = csv.with_columns(polars.concat_str(a, separator = " ", ignore_nulls = True).alias("full_text_search_column"))
+            self.csv = csv.with_columns(
+                polars.concat_str(a, separator = " ", ignore_nulls = True).alias("full_text_search_column"))
 
             self.original_csv = self.csv.clone()
             self.on_load(file_name, self)
@@ -62,11 +82,10 @@ class CSVDataFrameModel(QAbstractTableModel):
         self.csv = self.original_csv.filter(filter_expression)
         self.on_change(self)
 
-    def filter_on_vaql(self, all_filters: list[VAQLFilterLineEdit]):
-        # print(f"filter_on_vaql {all_filters}")
-
-        filter_text = all_filters[0].text()
+    def _filter_on_vaql(self, all_filters: list[VAQLFilter]):
+        filter_text = all_filters[0].text
         exp = None
+
         # TODO: Add code to handle case when filter_text == ""
         def get_exp_acc():
             if filter_text == "":
@@ -75,12 +94,13 @@ class CSVDataFrameModel(QAbstractTableModel):
                 return polars.col("full_text_search_column").str.contains_any(
                     [filter_text], ascii_case_insensitive = (filter_text.lower() == filter_text)
                 )
+
         exp_acc = get_exp_acc()
         exp_head_negating = all_filters[0].negating
 
         if len(all_filters) > 1:
             for f in all_filters[1:]:
-                filter_text = f.text()
+                filter_text = f.text
                 next_exp = polars.col("full_text_search_column").str.contains_any(
                     [filter_text], ascii_case_insensitive = (filter_text.lower() == filter_text)
                 )
@@ -118,7 +138,7 @@ class CSVDataFrameModel(QAbstractTableModel):
                     exp_acc = exp_acc.not_()
                 exp = exp & exp_acc
 
-        print(exp)
+        # print(exp)
 
         if exp is None:
             self.csv = self.original_csv.clone()
@@ -144,7 +164,7 @@ class CSVDataFrameModel(QAbstractTableModel):
 
     @override
     def rowCount(self, parent = ...) -> int:
-        return self.csv.shape[0]
+        return min(self.csv.shape[0], 1000)
 
     @override
     def columnCount(self, parent = ...) -> int:

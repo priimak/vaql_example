@@ -3,8 +3,8 @@ from pathlib import Path
 from PySide6.QtCore import QMargins
 from PySide6.QtWidgets import QVBoxLayout, QMenu, QWidget
 
-from csv_vaql_browser.csv_ui import CSVDataFrameModel, CSVTableView
 from csv_vaql_browser.app_context import AppContext
+from csv_vaql_browser.csv_ui import CSVDataFrameModel, CSVTableView
 from csv_vaql_browser.tools.err import msg_on_err
 from csv_vaql_browser.tools.panel_widget import Panel
 from csv_vaql_browser.tools.recenetly_opened_files import update_last_opened_files_menu
@@ -22,7 +22,7 @@ class MainPanel(Panel[QVBoxLayout]):
             ctx.upd_last_opened_files_menu(file_name, lambda file: (lambda: ctx.load_csv_file(f"{file}")))
             ctx.set_opened_file_label_text(f"{Path(file_name).absolute()}")
             table_model.layoutChanged.emit()
-            ctx.set_csv_dimensions_label_text(f"{table_model.rowCount()} x {table_model.columnCount()}")
+            ctx.set_csv_dimensions_label_text(f"{table_model.csv.shape[0]} x {table_model.columnCount()}")
             self.table_view.resizeColumnsToContents()
 
             update_last_opened_files_menu(
@@ -34,8 +34,7 @@ class MainPanel(Panel[QVBoxLayout]):
 
         def on_filter_change(table_model: CSVDataFrameModel):
             table_model.layoutChanged.emit()
-            # self.csv_dimensions_label.setText(f"{table_model.rowCount()} x {table_model.columnCount()}")
-            ctx.set_csv_dimensions_label_text(f"{table_model.rowCount()} x {table_model.columnCount()}")
+            ctx.set_csv_dimensions_label_text(f"{table_model.csv.shape[0]} x {table_model.columnCount()}")
 
         self.table_view: CSVTableView = CSVTableView(
             self, table_model = CSVDataFrameModel(on_load = on_csv_load, on_change = on_filter_change)
