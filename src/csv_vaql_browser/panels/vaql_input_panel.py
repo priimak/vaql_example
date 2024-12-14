@@ -1,5 +1,3 @@
-from typing import List
-
 from PySide6.QtCore import QMargins, Qt
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QVBoxLayout, QWidget, QHBoxLayout, QLabel
@@ -51,7 +49,6 @@ class VAQLInputPanel(Panel[QVBoxLayout]):
                 return and_label
 
         def update_layout():
-            print("updating layout")
             clear_layout()
             layout = self.layout()
 
@@ -134,7 +131,6 @@ class VAQLInputPanel(Panel[QVBoxLayout]):
             clear_layout()
             layout = self.layout()
             # layout.update()
-            print(f"A >>> {layout.count()}")
             panel = QWidget()
             panel.setContentsMargins(QMargins(0, 0, 0, 0))
             or_layout = QHBoxLayout()
@@ -158,20 +154,12 @@ class VAQLInputPanel(Panel[QVBoxLayout]):
 
                     else:  # Op.And
                         if panel.layout().count() > 0:
-                            print(f"adding {panel}")
                             layout.addWidget(panel)
                             self.widgets.append(panel)
                             and_label = QLabel("AND NOT") if node.value.negating else QLabel("AND")
                             and_label.setMargin(0)
                             and_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                            # and_label.setStyleSheet("font-weight: bold; background-color: black; color: white;")
                             and_label.setStyleSheet("font-weight: bold;")
-                            print(f"adding label {and_label}")
-
-                            # w = QWidget()
-                            # w.setContentsMargins(QMargins(0, 0, 0, 0))
-                            # w.setLayout(QHBoxLayout())
-                            # w.layout().addWidget(and_label)
                             layout.addWidget(and_label)
                             self.widgets.append(and_label)
                         panel = QWidget()
@@ -187,7 +175,6 @@ class VAQLInputPanel(Panel[QVBoxLayout]):
                 node = node.next
 
             if panel is not None:
-                print(f"adding {panel} 2")
                 self.widgets.append(panel)
                 layout.addWidget(panel)
 
@@ -196,8 +183,6 @@ class VAQLInputPanel(Panel[QVBoxLayout]):
 
             if filter_requesting_focus is not None:
                 filter_requesting_focus.setFocus()
-
-            print(f"B >>> {layout.count()}")
 
         ctx.filters_changed = update_layout
         self.filters = Node[VAQLFilterLineEdit](None)
@@ -224,8 +209,6 @@ class VAQLInputPanel(Panel[QVBoxLayout]):
         self.widgets.append(panel)
 
     def filters_changed(self):
-        print("filters_changed...............")
-
         all_filters: list[VAQLFilterLineEdit] = []
         filter_node = self.filters.next
         while filter_node is not None:

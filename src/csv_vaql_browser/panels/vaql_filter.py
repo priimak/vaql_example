@@ -72,7 +72,6 @@ class VAQLFilterLineEdit(QLineEdit):
         """
 
         def handle_and():
-            print("handle_and")
             if self.node.value.text().strip() != "":
                 # find last node on this line and insert Op.AND LineEdit
                 c_node = self.node
@@ -165,7 +164,6 @@ class VAQLFilterLineEdit(QLineEdit):
                         self.node.prev.value.request_focus = True
 
                     self.node.delete()
-                    print("delete...")
                     self.filters_changed_callback()
 
             case Qt.Key.Key_Space:
@@ -180,7 +178,6 @@ class VAQLFilterLineEdit(QLineEdit):
                         n.value.negating = not n.value.negating
                         self.node.value.request_focus = True
                         self.filters_changed_callback()
-                        print("calling filters_changed_callback ...")
                     return
 
                 if self.text().strip() != "":
@@ -205,7 +202,6 @@ class VAQLFilterLineEdit(QLineEdit):
 
             case _:
                 super().keyPressEvent(event)
-                # print(f">>> {key} :: {self.node.value.text().strip().lower()}")
                 # handle magic incantations
                 line_lower = self.node.value.text().strip().lower()
                 if line_lower.endswith(" and"):
