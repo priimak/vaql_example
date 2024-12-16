@@ -27,11 +27,9 @@ class CSVDataFrameModel(QAbstractTableModel):
             main_win: QWidget
     ):
         super().__init__()
-        self.signal_show_load_progress_dialog.connect(main_win.show_load_progress_dialog,
-                                                      Qt.ConnectionType.DirectConnection)
-        self.signal_close_load_progress_dialog.connect(main_win.close_load_progress_dialog,
-                                                       Qt.ConnectionType.DirectConnection)
-        self.signal_show_error.connect(main_win.show_error, Qt.ConnectionType.DirectConnection)
+        self.signal_show_load_progress_dialog.connect(main_win.show_load_progress_dialog)
+        self.signal_close_load_progress_dialog.connect(main_win.close_load_progress_dialog)
+        self.signal_show_error.connect(main_win.show_error)
 
         self.csv = DataFrame()
         self.original_csv = self.csv

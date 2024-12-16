@@ -4,9 +4,10 @@ from typing import override, Any, List
 
 from PySide6.QtCore import QMargins, Signal
 from PySide6.QtGui import QIcon, QCloseEvent, Qt
-from PySide6.QtWidgets import QMessageBox, QMainWindow, QMenu, QWidget, QVBoxLayout, QProgressDialog
+from PySide6.QtWidgets import QMessageBox, QMainWindow, QMenu, QWidget, QVBoxLayout
 
 from csv_vaql_browser.app_context import AppContext
+from csv_vaql_browser.busy_dialog import BusyDialog
 from csv_vaql_browser.menus import MainMenuBar
 from csv_vaql_browser.panels import MainPanel, BottomPanel
 from csv_vaql_browser.panels.vaql_input_panel import VAQLInputPanel
@@ -34,7 +35,6 @@ class MainWindow(QMainWindow):
         cvsx_icon_file_path = Path(__file__).parent / "csv_browser.png"
         self.setWindowIcon(QIcon(f"{cvsx_icon_file_path}"))
 
-        self.load_progress_dialog: list[QProgressDialog] = []
         self.ctx = AppContext(app_persistence)
 
         # connect dispatching methods in AppContext to relevant functions
@@ -49,6 +49,8 @@ class MainWindow(QMainWindow):
             main_panel = MainPanel(self.ctx, main_menu_bar.file_menu.recently_opened_menu, dialogs_parent = self),
             bottom_panel = BottomPanel(self.ctx)
         )
+
+        self.busy_dialog = []
 
     def optionally_reopen_last_opened_file(self) -> None:
         # re-open last opened file if so set in app config.
@@ -107,26 +109,15 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(root_panel)
 
-    def get_load_progress_dialog(self) -> QProgressDialog | None:
-        return None if self.load_progress_dialog == [] else self.load_progress_dialog[0]
-
     def show_load_progress_dialog(self) -> None:
-        progress_dialog = QProgressDialog("Loading csv file", None, 0, 100, self)
-        progress_dialog.setWindowFlags(progress_dialog.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
-
-        self.load_progress_dialog.clear()
-        self.load_progress_dialog.append(progress_dialog)
-
-        progress_dialog.setMinimumDuration(0)
-        progress_dialog.setMinimum(0)
-        progress_dialog.setMaximum(0)
-        progress_dialog.setValue(0)
-        progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        progress_dialog.show()
+        self.busy_dialog.append(BusyDialog(self, "Loading csv file", "Loading csv file"))
+        self.busy_dialog[0].show()
 
     def close_load_progress_dialog(self) -> None:
-        self.load_progress_dialog[0].canceled.emit()
-        self.load_progress_dialog.clear()
+        if self.busy_dialog != []:
+            self.busy_dialog[0].close_request.emit()
+            self.busy_dialog.copy()
 
     def show_error(self, message: str) -> None:
+        self.close_load_progress_dialog()
         QMessageBox.critical(self, "Error", message)
