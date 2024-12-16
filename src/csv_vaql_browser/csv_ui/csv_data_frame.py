@@ -1,28 +1,46 @@
+import sys
 import time
-from queue import Queue
+from queue import Queue, Empty
 from threading import Thread, Condition, Lock
 from typing import Callable, override, Any, Self, List
 
 import polars
-from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
+from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex, Signal
+from PySide6.QtWidgets import QWidget, QProgressDialog
 from polars import DataFrame
 
+from csv_vaql_browser.app_context import AppContext
 from csv_vaql_browser.panels.vaql_filter import VAQLFilterLineEdit, Op, VAQLFilter
 from csv_vaql_browser.tools.err import err
+from csv_vaql_browser.tools.thread_messages import EXIT, ThreadExit
 
 
 class CSVDataFrameModel(QAbstractTableModel):
-    def __init__(self, on_load: Callable[[str, Self], None], on_change: Callable[[Self], None]):
+    signal_show_load_progress_dialog = Signal()
+    signal_close_load_progress_dialog = Signal()
+
+    def __init__(
+            self, *,
+            ctx: AppContext,
+            on_load: Callable[[str, Self], None],
+            on_change: Callable[[Self], None],
+            main_win: QWidget
+    ):
         super().__init__()
+        self.signal_show_load_progress_dialog.connect(main_win.show_load_progress_dialog, Qt.ConnectionType.DirectConnection)
+        self.signal_close_load_progress_dialog.connect(main_win.close_load_progress_dialog, Qt.ConnectionType.DirectConnection)
+
         self.csv = DataFrame()
         self.original_csv = self.csv
         self.on_load = on_load
         self.on_change = on_change
         self.apply_filter: Callable[[str], None] = self.filter_on_substring
         self.loaded_file_name: str | None = None
+        self.main_win = main_win
 
         self.filters_lock = Lock()
-        self.filters_queue = Queue[List[VAQLFilter]]()
+        self.filters_queue = Queue[List[VAQLFilter | ThreadExit]]()
+        ctx.register_queue_for_exit(self.filters_queue)
         self.filter_changed_condition = Condition()
         self.update_thread = Thread(target = self.watchman)
         self.update_thread.start()
@@ -30,7 +48,10 @@ class CSVDataFrameModel(QAbstractTableModel):
     def watchman(self) -> None:
         while True:
             filters = self.filters_queue.get()
-            if self.filters_queue.empty():
+            print(f"self.filters_queue.get() = {filters}")
+            if filters is EXIT:
+                return
+            elif self.filters_queue.empty():
                 start_at: float = time.time()
                 self._filter_on_vaql(filters)
                 print(f"search done in {time.time() - start_at} s")
@@ -38,7 +59,27 @@ class CSVDataFrameModel(QAbstractTableModel):
     def filter_on_vaql(self, all_filters: list[VAQLFilterLineEdit]):
         self.filters_queue.put([f.to_plain_filter() for f in all_filters])
 
+    def update_progress_dialog(self):
+        new_value = (self.progress.value() + 1) % 100
+        print(f"new value : {new_value}")
+        self.progress.setValue(new_value)
+
+    def progress_dialog(self) -> QProgressDialog:
+        return self.progress
+
     def load_csv_file(self, file_name: str) -> Exception | None:
+        # msg_queue = Queue[int]()
+
+        # def foo():
+        #     while msg_queue.get() == 0:
+        #         print("qtimer ...")
+        #         sys.stdout.flush()
+        #         # new_value = (self.progress_dialog().value() + 1) % 100
+        #         # self.progress_dialog().setValue(new_value)
+        #     print("foo::stop")
+
+        self.signal_show_load_progress_dialog.emit()
+
         try:
             csv = polars.read_csv(file_name)
 
@@ -52,6 +93,11 @@ class CSVDataFrameModel(QAbstractTableModel):
             return None
         except Exception as ex:
             return ex
+        finally:
+            print("t.stop()")
+            self.signal_close_load_progress_dialog.emit()
+
+            # self.progress.close()
 
     def save_csv_file(self, file_name: str | None) -> Exception | None:
         target_file_name = self.loaded_file_name if file_name is None else file_name

@@ -1,30 +1,46 @@
+import threading
 from pathlib import Path
-from typing import override, Callable
+from queue import Queue
+from threading import Thread
+from typing import override, Callable, Any, List
 
-from PySide6.QtCore import QMargins
-from PySide6.QtGui import QIcon, QCloseEvent
-from PySide6.QtWidgets import QMessageBox, QMainWindow, QMenu, QWidget, QVBoxLayout
+from PySide6.QtCore import QMargins, Signal, QTimer
+from PySide6.QtGui import QIcon, QCloseEvent, Qt
+from PySide6.QtWidgets import QMessageBox, QMainWindow, QMenu, QWidget, QVBoxLayout, QProgressDialog
 
 from csv_vaql_browser.app_context import AppContext
 from csv_vaql_browser.menus import MainMenuBar
 from csv_vaql_browser.panels import MainPanel, BottomPanel
 from csv_vaql_browser.panels.vaql_input_panel import VAQLInputPanel
 from csv_vaql_browser.tools.app_persist import AppPersistence
+from csv_vaql_browser.tools.thread_messages import EXIT, ThreadExit
 
 
 class MainWindow(QMainWindow):
+    s = Signal()
+
     def __init__(self, screen_dim: tuple[int, int], app_persistence: AppPersistence):
         super().__init__()
+
+        self.s.connect(self.optionally_reopen_last_opened_file, Qt.ConnectionType.DirectConnection)
+
         self.app_state = app_persistence.state
         self.app_config = app_persistence.config
         self.setWindowTitle("CSV Browser + VAQL")
         self.set_geometry(screen_dim[0], screen_dim[1])
         self.recently_opened_menu: QMenu | None = None
+        self.queues_for_exit: List[Queue[Any | ThreadExit]] = []
 
         cvsx_icon_file_path = Path(__file__).parent / "csv_browser.png"
         self.setWindowIcon(QIcon(f"{cvsx_icon_file_path}"))
 
+        self.load_progress_dialog: list[QProgressDialog] = []
         self.ctx = AppContext(app_persistence)
+
+        # connect dispatching methods in AppContext to relevant functions
+        self.ctx.upd_last_opened_files_menu = self.update_last_opened_files_menu
+        self.ctx.exit_application = self.close
+        self.ctx.register_queue_for_exit = self.register_queue_for_exit
 
         # setup menu bar and panels
         main_menu_bar = MainMenuBar(self.ctx, dialogs_parent = self)
@@ -35,15 +51,34 @@ class MainWindow(QMainWindow):
             bottom_panel = BottomPanel(self.ctx)
         )
 
-        # connect dispatching methods in AppContext to relevant functions
-        self.ctx.upd_last_opened_files_menu = self.update_last_opened_files_menu
-        self.ctx.exit_application = self.close
+    def optionally_reopen_last_opened_file(self) -> None:
+
+        progress_dialog = QProgressDialog("Loading csv file", "Abort", 0, 100)
+        progress_dialog.setMinimumDuration(0)
+        progress_dialog.setValue(0)
+        progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        progress_dialog.show()
+
+        def update():
+            # print("update ...")
+            new_value = int((progress_dialog.value() + 1) % 100)
+            progress_dialog.setValue(new_value)
+
+        t = QTimer(self)
+        t.timeout.connect(update)
+        t.start(100)
+
+        progress_dialog.canceled.connect(t.stop)
+
 
         # re-open last opened file if so set in app config.
         if self.app_config.get_value("open_last_opened_file_on_load", bool | None) is True:
             last_opened_files = self.app_state.get_value("last_opened_files", [])
             if last_opened_files != []:
                 self.ctx.load_csv_file(last_opened_files[0])
+
+    def register_queue_for_exit(self, queue: Queue[Any | ThreadExit]) -> None:
+        self.queues_for_exit.append(queue)
 
     @override
     def closeEvent(self, event: QCloseEvent):
@@ -57,6 +92,10 @@ class MainWindow(QMainWindow):
             self.app_config.set_value("open_last_opened_file_on_load", result == QMessageBox.StandardButton.Yes)
 
         self.app_state.save_geometry("main", self.saveGeometry())
+
+        for queue in self.queues_for_exit:
+            queue.put(EXIT)
+
         event.accept()
 
     def set_geometry(self, screen_width: int, screen_height: int):
@@ -115,3 +154,23 @@ class MainWindow(QMainWindow):
             self.recently_opened_menu.clear()
             for file in self.app_state.get_value("last_opened_files", []):
                 self.recently_opened_menu.addAction(file, file_opener_factory(file))
+
+    def get_load_progress_dialog(self) -> QProgressDialog | None:
+        return None if self.load_progress_dialog == [] else self.load_progress_dialog[0]
+
+    def show_load_progress_dialog(self) -> None:
+        progress_dialog = QProgressDialog("Loading csv file", "Abort", 0, 100)
+        self.load_progress_dialog.clear()
+        self.load_progress_dialog.append(progress_dialog)
+
+        # self.dq = self.load_dialog_signal.connect(self.progress.setValue, Qt.ConnectionType.DirectConnection)
+
+        progress_dialog.setMinimumDuration(0)
+        progress_dialog.setValue(0)
+        progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        progress_dialog.show()
+
+
+    def close_load_progress_dialog(self) -> None:
+        self.load_progress_dialog[0].close()
+        self.load_progress_dialog.clear()

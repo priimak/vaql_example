@@ -1,7 +1,9 @@
+from queue import Queue
 from typing import Callable, Any
 
 # from csv_vaql_browser.panels.vaql_filter import VAQLFilterLineEdit
 from csv_vaql_browser.tools.app_persist import AppPersistence
+from csv_vaql_browser.tools.thread_messages import EXIT
 
 
 class AppContext:
@@ -18,3 +20,4 @@ class AppContext:
         self.exit_application: Callable[[], None] = lambda: None
         self.filters_changed: Callable[[], None] = lambda: None
         self.filter_on_vaql: Callable[[list[Any]], None] = lambda _: None
+        self.register_queue_for_exit: Callable[[Queue[Any | EXIT]], None] = lambda _: None
