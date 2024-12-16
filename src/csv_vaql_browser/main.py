@@ -1,7 +1,6 @@
 import sys
 
-from PySide6.QtCore import QTimer, Qt
-from PySide6.QtWidgets import QApplication, QProgressDialog
+from PySide6.QtWidgets import QApplication
 
 from csv_vaql_browser.main_window import MainWindow
 from csv_vaql_browser.tools.app_persist import AppPersistence
@@ -23,13 +22,7 @@ def main():
     )
     win = MainWindow(screen_dim = (screen_width, screen_height), app_persistence = persistence)
     win.show()
-    win.s.emit()
-    # QApplication.processEvents()
-
-    # progress = QProgressDialog("Foo", "Abort", 0, 100, win)
-    # progress.setValue(0)
-    # progress.setWindowModality(Qt.WindowModality.WindowModal)
-    # progress.show()
+    win.reopen_last_opened_file.emit()
 
     sys.exit(app.exec())
 

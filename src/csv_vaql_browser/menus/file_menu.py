@@ -27,7 +27,7 @@ class FileMenu(QMenu):
         init_recently_opened_menu(
             app_persistence = ctx.app_persistence,
             recently_opened_menu = self.recently_opened_menu,
-            file_opener_factory = lambda file: (lambda: ctx.load_csv_file(f"{file}"))
+            ctx = ctx
         )
 
         # Other menu items

@@ -1,12 +1,11 @@
-import sys
 import time
-from queue import Queue, Empty
+from queue import Queue
 from threading import Thread, Condition, Lock
 from typing import Callable, override, Any, Self, List
 
 import polars
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex, Signal
-from PySide6.QtWidgets import QWidget, QProgressDialog
+from PySide6.QtWidgets import QWidget
 from polars import DataFrame
 
 from csv_vaql_browser.app_context import AppContext
@@ -18,6 +17,7 @@ from csv_vaql_browser.tools.thread_messages import EXIT, ThreadExit
 class CSVDataFrameModel(QAbstractTableModel):
     signal_show_load_progress_dialog = Signal()
     signal_close_load_progress_dialog = Signal()
+    signal_show_error = Signal(str)
 
     def __init__(
             self, *,
@@ -27,8 +27,11 @@ class CSVDataFrameModel(QAbstractTableModel):
             main_win: QWidget
     ):
         super().__init__()
-        self.signal_show_load_progress_dialog.connect(main_win.show_load_progress_dialog, Qt.ConnectionType.DirectConnection)
-        self.signal_close_load_progress_dialog.connect(main_win.close_load_progress_dialog, Qt.ConnectionType.DirectConnection)
+        self.signal_show_load_progress_dialog.connect(main_win.show_load_progress_dialog,
+                                                      Qt.ConnectionType.DirectConnection)
+        self.signal_close_load_progress_dialog.connect(main_win.close_load_progress_dialog,
+                                                       Qt.ConnectionType.DirectConnection)
+        self.signal_show_error.connect(main_win.show_error, Qt.ConnectionType.DirectConnection)
 
         self.csv = DataFrame()
         self.original_csv = self.csv
@@ -48,7 +51,6 @@ class CSVDataFrameModel(QAbstractTableModel):
     def watchman(self) -> None:
         while True:
             filters = self.filters_queue.get()
-            print(f"self.filters_queue.get() = {filters}")
             if filters is EXIT:
                 return
             elif self.filters_queue.empty():
@@ -59,45 +61,28 @@ class CSVDataFrameModel(QAbstractTableModel):
     def filter_on_vaql(self, all_filters: list[VAQLFilterLineEdit]):
         self.filters_queue.put([f.to_plain_filter() for f in all_filters])
 
-    def update_progress_dialog(self):
-        new_value = (self.progress.value() + 1) % 100
-        print(f"new value : {new_value}")
-        self.progress.setValue(new_value)
-
-    def progress_dialog(self) -> QProgressDialog:
-        return self.progress
-
-    def load_csv_file(self, file_name: str) -> Exception | None:
-        # msg_queue = Queue[int]()
-
-        # def foo():
-        #     while msg_queue.get() == 0:
-        #         print("qtimer ...")
-        #         sys.stdout.flush()
-        #         # new_value = (self.progress_dialog().value() + 1) % 100
-        #         # self.progress_dialog().setValue(new_value)
-        #     print("foo::stop")
-
+    def load_csv_file(self, file_name: str):
         self.signal_show_load_progress_dialog.emit()
 
-        try:
-            csv = polars.read_csv(file_name)
+        def lock_and_load():
+            try:
+                csv = polars.read_csv(file_name)
 
-            a = [polars.col(column_name).cast(polars.String) for column_name in csv.columns]
-            self.csv = csv.with_columns(
-                polars.concat_str(a, separator = " ", ignore_nulls = True).alias("full_text_search_column"))
+                all_clmns = [polars.col(column_name).cast(polars.String) for column_name in csv.columns]
+                self.csv = csv.with_columns(
+                    polars.concat_str(all_clmns, separator = " ", ignore_nulls = True).alias("full_text_search_column")
+                )
 
-            self.original_csv = self.csv.clone()
-            self.on_load(file_name, self)
-            self.loaded_file_name = file_name
-            return None
-        except Exception as ex:
-            return ex
-        finally:
-            print("t.stop()")
-            self.signal_close_load_progress_dialog.emit()
+                self.original_csv = self.csv.clone()
+                self.on_load(file_name, self)
+            except BaseException as ex:
+                self.signal_show_error.emit(f"Unable to open {file_name}\n{ex}")
+            finally:
+                self.signal_close_load_progress_dialog.emit()
+                self.loaded_file_name = file_name
 
-            # self.progress.close()
+        thread = Thread(target = lock_and_load)
+        thread.start()
 
     def save_csv_file(self, file_name: str | None) -> Exception | None:
         target_file_name = self.loaded_file_name if file_name is None else file_name
@@ -183,8 +168,6 @@ class CSVDataFrameModel(QAbstractTableModel):
                 if exp_head_negating:
                     exp_acc = exp_acc.not_()
                 exp = exp & exp_acc
-
-        # print(exp)
 
         if exp is None:
             self.csv = self.original_csv.clone()

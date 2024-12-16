@@ -9,7 +9,6 @@ from csv_vaql_browser.tools.thread_messages import EXIT
 class AppContext:
     def __init__(self, app_persistence: AppPersistence):
         self.app_persistence = app_persistence
-        self.upd_last_opened_files_menu: Callable[[str, Callable[[str], Callable[[], None]]], None] = lambda a, b: None
         self.set_opened_file_label_text: Callable[[str], None] = lambda _: None
         self.set_csv_dimensions_label_text: Callable[[str], None] = lambda _: None
         self.load_csv_file: Callable[[str], None] = lambda _: None

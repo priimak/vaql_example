@@ -126,11 +126,13 @@ class VAQLFilterLineEdit(QLineEdit):
             case Qt.Key.Key_Left:
                 if self.node.prev is not None and event.modifiers() in [Qt.KeyboardModifier.ControlModifier,
                                                                         Qt.KeyboardModifier.ShiftModifier]:
-                    self.node.prev.value.setFocus()
+                    if self.node.prev.value is not None:
+                        self.node.prev.value.setFocus()
                 else:
                     original_cursor_position = self.cursorPosition()
                     super().keyPressEvent(event)
-                    if original_cursor_position == self.cursorPosition() and self.node.prev is not None:
+                    if (original_cursor_position == self.cursorPosition() and self.node.prev is not None and
+                            self.node.prev.value is not None):
                         # we came to end of the text; jump over to the next cell
                         self.node.prev.value.setFocus()
 

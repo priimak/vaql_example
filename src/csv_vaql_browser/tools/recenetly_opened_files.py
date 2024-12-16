@@ -1,26 +1,32 @@
 from pathlib import Path
-from typing import Callable
 
 from PySide6.QtWidgets import QMenu
 
+from csv_vaql_browser.app_context import AppContext
 from csv_vaql_browser.tools.app_persist import AppPersistence
 
 
 def init_recently_opened_menu(
         app_persistence: AppPersistence,
         recently_opened_menu: QMenu,
-        file_opener_factory: Callable[[str], Callable[[], None]]
+        ctx: AppContext
 ) -> None:
     recently_opened_menu.clear()
     for file in app_persistence.state.get_value("last_opened_files", []):
-        recently_opened_menu.addAction(file, file_opener_factory(file))
+        def f(ff: str):
+            def fff():
+                ctx.load_csv_file(f"{ff}")
+
+            return fff
+
+        recently_opened_menu.addAction(file, f(file))
 
 
 def update_last_opened_files_menu(
         app_persistence: AppPersistence,
         recently_opened_menu: QMenu,
         file_name: str,
-        file_opener_factory: Callable[[str], Callable[[], None]]
+        ctx: AppContext
 ) -> None:
     last_opened_files = app_persistence.state.get_value("last_opened_files", [])
     fname = f"{Path(file_name).absolute()}"
@@ -37,4 +43,4 @@ def update_last_opened_files_menu(
     app_persistence.state.save_value("last_opened_files", last_opened_files)
 
     # update sub-menu "Prev Opened"
-    init_recently_opened_menu(app_persistence, recently_opened_menu, file_opener_factory)
+    init_recently_opened_menu(app_persistence, recently_opened_menu, ctx)
