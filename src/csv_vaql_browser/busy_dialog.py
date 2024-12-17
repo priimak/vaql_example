@@ -1,4 +1,4 @@
-from PySide6.QtCore import QTimer, Signal
+from PySide6.QtCore import QTimer, Signal, Qt
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QWidget, QLabel, QProgressBar
 
 
@@ -10,7 +10,7 @@ class BusyDialog(QDialog):
         self.setModal(True)
         self.setWindowTitle(title)
         self.close_request.connect(self.close)
-        # self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
 
         self.setLayout(QVBoxLayout())
         self.layout().addWidget(QLabel(message))
